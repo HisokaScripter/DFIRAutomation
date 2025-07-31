@@ -1,2 +1,3 @@
 # DFIRAutomation
-My personal lib of tools.
+Forensic Automation
+Need to make it modular.
