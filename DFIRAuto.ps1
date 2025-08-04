@@ -3,7 +3,6 @@
 # Description: This script automates the process of mounting forensic images using Arsenal Image Mounter.
 # Requirements: Arsenal Image Mounter (acli.exe) 
 
-
 function Get-File { # Prompt user to select file
     [CmdletBinding()]
     param (
@@ -23,13 +22,143 @@ function Get-File { # Prompt user to select file
     }
 }
 
-function Get-InitialConfig(){ # This needs to run once to get user configs
+[boolean] function Set-InitialConfig() { # This needs to run once to get user configs
+    $configFile = "$env:USERPROFILE\DFIRAutoConfig.json"
+    if (Test-Path $configFile) { # Check if config file exists
+        return "Already configured. Use the config file to change settings."
+    }
 
+    $config = @{
+        ArsenalImageMounterPath = ""
+        Tools = @()
+    }
+    $ContinueConfig = $true
+
+    while ($ContinueConfig) { # Look until user selects all tools to work with
+        $ToolPath = Get-File -Title "Select tool currentToolCount" -InitialDirectory (Get-Location)
+        $config.Tools.Add($ToolPath)
+        if (Get-Content $configFile){ # Check if config is not empty
+            $ToolPath >> $configFile# Append config
+        }
+        else { # config file was empty
+            $ToolPath > $configFile # Create new config file
+        }
+
+        write-host "Current tools: `n" -ForegroundColor Cyan
+        foreach ($tool in $config.Tools) {
+            write-host "#$($config.Tools.Count()): $tool `n" -ForegroundColor Green
+        }
+
+        if ($arsenalPath) {
+            $config.ArsenalImageMounterPath = $arsenalPath
+            $ContinueConfig = $false
+        } else {
+            Write-Host "No file selected. Please select a valid Arsenal Image Mounter path." -ForegroundColor Red
+        }
+    }
+    return $true
+}
+
+[System.IO.File] function Get-ToolConfig(){
+    $configFile = "$env:USERPROFILE\DFIRAutoConfig.json"
+    if (Test-Path $configFile) {
+        $config = Get-Content $configFile | ConvertFrom-Json
+        return $config.Tools
+    } else {
+        Write-Host "Configuration file not found. Please run Set-InitialConfig first." -ForegroundColor Red
+        return $null
+    }
 }
 
 class Mounter { # Class to handle image mounting
-    Mounter() {
+    Mounter([System.IO.FilePath]$ToolOutputPath) {
+        $this.OutPutDir = $ToolOutputPath
         $this.Mounter = Get-File -Title "Select the arsenal image mounter acli.exe" -InitialDirectory (Get-Location)
+        $this.Date = Get-Date -Format "yyyyMMddHHmm"
+    }
+    [string] Get-ToolConfig([string]$ToolName) {
+        $KnownToolArgs = @(
+            Hayabusa = @(),
+            Thor = @(),
+            Kape = @(),
+            Autopsy = @(),
+            CyberTriage = @(),
+            Plaso = @(),
+            Sleuthkit = @(),
+            Volatility = @(),
+            Rekall = @(),
+            X1 = @(),
+            FTKImager = @(),
+            Xplico = @(),
+            BulkExtractor = @(),
+            Binwalk = @(),
+            Foremost = @(),
+            Scalpel = @(),
+            Sleuthkit = @(),
+        )
+        switch ($ToolName){
+            "Hayabusa" {
+                $KnownToolArgs.Hayabusa.Add("csv-timeline")
+                $KnownToolArgs.Hayabusa.Add("-d")
+                $KnownToolArgs.Hayabusa.Add($this.MountedDriveLetter)
+                $KnownToolArgs.Hayabusa.Add("--output")
+                #Define output directory for Hayabusa
+                $HayabusaOutputDir = $this.OutPutDir + "/Hayabusa/$($this.MountedDrive.Name) $($this.Date).csv" # Create output directory with date
+                Test-Path $HayabusaOutputDir # Check if output directory exists
+                if (-not $?) { # If it does not exist, create it
+                    New-Item -ItemType Directory -Path $HayabusaOutputDir -Force | Out-Null
+                }
+                $KnownToolArgs.Hayabusa.Add($HayabusaOutputDir)
+                $KnownToolArgs.Hayabusa.Add("--profile")
+                $KnownToolArgs.Hayabusa.Add("super-verbose")
+                $KnownToolArgs.Hayabusa.Add("--UTC")
+                $KnownToolArgs.Hayabusa.Add("-w")
+                $KnownToolArgs.Hayabusa.Add("-A")
+                $KnownToolArgs.Hayabusa.Add("-a")
+                $KnownToolArgs.Hayabusa.Add("-D")
+                $KnownToolArgs.Hayabusa.Add("-n")
+                $KnownToolArgs.Hayabusa.Add("-u")
+                $KnownToolArgs.Hayabusa.Add("-q")
+            }
+            "Thor" {
+                $KnownToolArgs.Thor.Add("-a")
+                $KnownToolArgs.Thor.Add("Filescan")
+                $KnownToolArgs.Thor.Add("--nocpulimit")
+                $KnownToolArgs.Thor.Add("--max-reasons 0")
+                $KnownToolArgs.Thor.Add("--nothordb")
+                $KnownToolArgs.Thor.Add("--utc")
+                $KnownToolArgs.Thor.Add("-p")
+                $KnownToolArgs.Thor.Add($this.MountedDriveLetter)
+                $KnownToolArgs.Thor.Add("-e")
+                $ThorOutputDir = $this.OutPutDir + "/Thor/$($this.MountedDrive.Name) $($this.Date).csv" # Create output directory with date
+                Test-Path $ThorOutputDir # Check if output directory exists
+                if (-not $?) { # If it does not exist, create it
+                    New-Item -ItemType Directory -Path $ThorOutputDir -Force | Out-Null
+                }
+                $KnownToolArgs.Thor.Add($ThorOutputDir)
+                $KnownToolArgs.Thor.Add("-NoNewWindow")
+                $KnownToolArgs.Thor.Add("-PassThru")
+                $KnownToolArgs.Thor.Add("-Wait")
+            }
+            "Kape" {
+                $KnownToolArgs.Kape.Add("--msource")
+                $KnownToolArgs.Kape.Add($this.MountedDriveLetter)
+                $KnownToolArgs.Kape.Add("--mdest")
+                $KapeOutputDir = $this.OutPutDir + "/Kape/$($this.MountedDrive.Name) $($this.Date)" # Create output directory with date
+                Test-Path $KapeOutputDir # Check if output directory exists
+                if (-not $?) { # If it does not exist, create it
+                    New-Item -ItemType Directory -Path $KapeOutputDir -Force | Out-Null
+                }
+                $KnownToolArgs.Kape.Add($KapeOutputDir)
+                $KnownToolArgs.Kape.Add("--module")
+                $KnownToolArgs.Kape.Add("!EZParser")
+                $KnownToolArgs.Kape.Add("-NoNewWindow")
+                $KnownToolArgs.Kape.Add("-PassThru")
+                $KnownToolArgs.Kape.Add("-Wait")
+            }
+            
+        }
+
     }
 
     [boolean] Mount-Image([System.IO.FilePath]$ImagePath, [string]$Provider) {
@@ -44,6 +173,7 @@ class Mounter { # Class to handle image mounting
             "--writeoverlay=$($ImagePath)", 
             "--autodelete"
         )
+
         $MountArgs = " "
         foreach ($arg in $MountArgs_HashTable) {
             $MountArgs += "$arg "
@@ -95,12 +225,23 @@ function ProcessImages([System.IO.File]$ImageFile, [string]$Provider) {
             $MountedDrive = $Drive
         }
     }
+
     write-host $MountedDrive
+
+    #Run tools on the mounted drive
+
 }
 
 function main(){
     $mounter = [Mounter]::new()
-    #[System.IO.FilePath[]]$Images = $()
+    $Created = Set-InitialConfig()
+
+    if ($Created) {
+        wite-host "New Config Created" -ForegroundColor Green
+    }
+    else{
+        write-host $Created -ForegroundColor Cyan # Already configured message
+    }
     $NumberOfImages = Read-Host "How many images do you want to mount? (Default: 1)" or 1
 
     [Int]$MountableImages = 1..Int($NumberOfImages)
