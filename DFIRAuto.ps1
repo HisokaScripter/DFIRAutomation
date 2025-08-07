@@ -284,4 +284,4 @@ function main(){
     }
 }
 
-main()
+main
