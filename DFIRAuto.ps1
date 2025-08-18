@@ -1,4 +1,4 @@
-# DFIRAuto.ps1
+# DFIRAuto.ps1 (WIP)
 # Creaded by: HisokaScripter
 # Description: This script automates the process of mounting forensic images using Arsenal Image Mounter.
 # Requirements: Arsenal Image Mounter (acli.exe) 
